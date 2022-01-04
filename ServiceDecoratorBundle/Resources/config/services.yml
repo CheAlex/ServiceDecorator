@@ -1,0 +1,50 @@
+parameters:
+    app_service_decorator.proxies_directory: '%kernel.cache_dir%'
+
+services:
+    # default configuration for services in *this* file
+    _defaults:
+        autowire: true      # Automatically injects dependencies in your services.
+        autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+
+    app_service_decorator.proxy_manager.file_locator:
+        class: ProxyManager\FileLocator\FileLocator
+        arguments:
+            $proxiesDirectory: '%app_service_decorator.proxies_directory%'
+
+    app_service_decorator.proxy_manager.generator_strategy:
+        class: ProxyManager\GeneratorStrategy\FileWriterGeneratorStrategy
+        arguments:
+            $fileLocator: '@app_service_decorator.proxy_manager.file_locator'
+
+    app_service_decorator.proxy_manager.configuration:
+        class: ProxyManager\Configuration
+        calls:
+            - [setGeneratorStrategy, ['@app_service_decorator.proxy_manager.generator_strategy']]
+            - [setProxiesTargetDir, ['%app_service_decorator.proxies_directory%']]
+
+    app_service_decorator.proxy_manager.proxy_factory:
+        class: ProxyManager\Factory\AccessInterceptorValueHolderFactory
+        arguments:
+            $configuration: '@app_service_decorator.proxy_manager.configuration'
+
+    App\ServiceDecorator\Middleware\FlushMiddleware:
+        tags:
+            - { name: 'app_service_decorator.middleware', attribute: App\ServiceDecorator\Attribute\Flushable }
+
+    App\ServiceDecorator\Middleware\TransactionMiddleware:
+        tags:
+            - { name: 'app_service_decorator.middleware', attribute: App\ServiceDecorator\Attribute\Transactional }
+
+    App\ServiceDecorator\Middleware\EventDispatcherMiddleware:
+        tags:
+            - { name: 'app_service_decorator.middleware', attribute: App\ServiceDecorator\Attribute\EventDispatching }
+
+    App\ServiceDecorator\Middleware\ServiceExecutorMiddleware: ~
+
+    App\ServiceDecorator\Middleware\MiddlewareLocator:
+        arguments: [ !tagged_locator { tag: 'app_service_decorator.middleware', index_by: 'attribute' } ]
+
+    App\ServiceDecorator\ServiceDecoratorFactory:
+        arguments:
+            $proxyFactory: '@app_service_decorator.proxy_manager.proxy_factory'
